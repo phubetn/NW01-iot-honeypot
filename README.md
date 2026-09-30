@@ -1,34 +1,140 @@
-﻿# IoT Honeypot Scenario Lab
+IoT Honeypot Testbet
 
-Local-only undergraduate research MVP for generating ordered, synthetic IoT honeypot behavior traces. Scenario labels invoke canned in-process mock interactions. There is no support for external targets, arbitrary URLs, shell commands, or exploit payloads.
+MVP สำหรับงานวิจัยระดับปริญญาตรีที่ทำงานภายในเครื่องเท่านั้น ใช้สำหรับสร้าง Behavioral Trace ของพฤติกรรม IoT แบบสังเคราะห์ตามลำดับเหตุการณ์ โดยแต่ละ Scenario จะเรียกใช้พฤติกรรมจำลองที่กำหนดไว้ล่วงหน้า
 
-## Architecture and data flow
+ระบบนี้ ไม่มีการรองรับ การเชื่อมต่อไปยังเป้าหมายภายนอก, URL ที่กำหนดเอง, คำสั่ง Shell หรือ Payload สำหรับการโจมตีจริง
 
-`Browser UI → FastAPI scenario controller → canned mock behavior map → trace collector/database layer → SQLite → trace table and session timeline`
+สถาปัตยกรรมและการไหลของข้อมูล
+Browser UI
+    ↓
+FastAPI Scenario Controller
+    ↓
+ชุดพฤติกรรมจำลองที่กำหนดไว้ล่วงหน้า
+    ↓
+Trace Collector / Database Layer
+    ↓
+SQLite
+    ↓
+ตาราง Trace และ Session Timeline
 
-`backend/main.py` exposes the REST API and serves the frontend. Its fixed `ACTIONS` map is the adapter boundary for replacing mock handlers with controlled testbed adapters later. Each accepted step becomes one ordered event with UTC timestamp, session ID, source ID, service, behavior label, result, and inter-event interval. SQLite stores sessions, events, and reconstructed sequences under `data/`.
+ไฟล์ backend/main.py ทำหน้าที่เป็น REST API และให้บริการหน้าเว็บ Frontend
 
-## Run locally
+ภายในระบบมี ACTIONS ซึ่งเป็นชุดพฤติกรรมที่กำหนดไว้ล่วงหน้า โดยทำหน้าที่เป็น จุดเชื่อมต่อสำหรับเปลี่ยนจาก Mock Handler ไปเป็น Adapter ของ Testbed จริงในอนาคต
 
-Requires Python 3.10+.
+เมื่อแต่ละขั้นตอนของ Scenario ได้รับการยอมรับ ระบบจะสร้าง Event ตามลำดับ โดยบันทึกข้อมูลดังนี้:
 
-```powershell
+เวลา UTC
+Session ID
+Source ID
+Service
+Behavior Label
+Result
+ระยะเวลาระหว่าง Event
+
+ข้อมูลจะถูกจัดเก็บใน SQLite โดยแบ่งเป็น:
+
+Sessions
+Events
+Behavioral Sequences
+
+ไฟล์ฐานข้อมูลอยู่ที่:
+
+data/honeypot.sqlite3
+การรันระบบภายในเครื่อง
+
+ต้องใช้ Python 3.10 ขึ้นไป
+
+เปิด PowerShell แล้วใช้คำสั่ง:
+
 py -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn backend.main:app --host 127.0.0.1 --port 8000
-```
 
-Open `http://127.0.0.1:8000`. Keep the host bound to loopback for local development. The database is created automatically at `data/honeypot.sqlite3`.
+จากนั้นเปิด:
 
-## API
+http://127.0.0.1:8000
 
-- `GET /api/status`, `/api/scenarios`, `/api/sessions`, `/api/events`, `/api/statistics`
-- `GET /api/sessions/{session_id}`
-- `POST /api/scenarios/run` with `{ "steps": ["service_discovery", "mqtt_connect"], "source_id": "attacker-emulator", "delay_ms": 350 }`
+ระบบควรผูกกับ 127.0.0.1 เพื่อให้ทำงานเฉพาะภายในเครื่องสำหรับการพัฒนา
 
-The API validates every behavior against the fixed safe action map. The client ID accepts letters, numbers, `_` and `-`; delays are limited to 100–5000 ms and scenarios to 30 steps. `login_attempt` is represented as a controlled denied synthetic event. All other mock events are local observations or harmless canned actions.
+ฐานข้อมูลจะถูกสร้างขึ้นโดยอัตโนมัติที่:
 
-## MVP boundaries
+data/honeypot.sqlite3
+API
 
-Mock services produce trace records in-process; they do not open MQTT/CoAP network listeners or control hardware. Real service log, packet metadata, and device adapters can be added behind the fixed action map and collector schema, with collection limited to the controlled testbed.
+ระบบมี API หลักดังนี้:
+
+GET  /api/status
+GET  /api/scenarios
+GET  /api/sessions
+GET  /api/events
+GET  /api/statistics
+
+GET  /api/sessions/{session_id}
+
+POST /api/scenarios/run
+
+ตัวอย่างการเรียกใช้:
+
+{
+  "steps": [
+    "service_discovery",
+    "mqtt_connect"
+  ],
+  "source_id": "attacker-emulator",
+  "delay_ms": 350
+}
+
+ระบบจะตรวจสอบทุก Behavior ว่าอยู่ใน ชุดพฤติกรรมที่กำหนดไว้อย่างปลอดภัย หรือไม่
+
+ข้อกำหนดของข้อมูล:
+
+source_id รองรับตัวอักษร ตัวเลข _ และ -
+ระยะเวลาหน่วงอยู่ระหว่าง 100–5000 มิลลิวินาที
+หนึ่ง Scenario มีได้สูงสุด 30 ขั้นตอน
+
+login_attempt จะถูกแทนด้วย Event จำลองที่ถูกปฏิเสธ
+
+ส่วน Mock Event อื่น ๆ เป็นเพียงการจำลองหรือการบันทึกเหตุการณ์ที่ไม่เป็นอันตรายภายในระบบ
+
+ขอบเขตของ MVP
+
+ในเวอร์ชันนี้ Mock Service จะสร้าง Trace Record ภายในโปรแกรมโดยตรง
+
+ยังไม่มีการ:
+
+เปิด MQTT Listener จริง
+เปิด CoAP Listener จริง
+ควบคุม Hardware จริง
+เชื่อมต่อกับระบบภายนอก
+
+ในอนาคตสามารถเพิ่ม Adapter สำหรับ:
+
+Service Log จริง
+ข้อมูล Metadata จาก Network Packet
+Device Log
+Raspberry Pi
+ESP32
+MQTT
+CoAP
+
+โดยนำ Adapter เหล่านี้เชื่อมต่อผ่าน ACTIONS และ Trace Collector Schema ที่มีอยู่แล้ว
+
+การเก็บข้อมูลในอนาคตต้องจำกัดอยู่ภายใน IoT Testbed ที่ควบคุมได้ของโครงงานเท่านั้น
+
+สรุปสั้น ๆ ของ MVP นี้
+ผู้ใช้เลือก Scenario
+        ↓
+เลือก Behavior ตามลำดับ
+        ↓
+ระบบจำลองพฤติกรรม
+        ↓
+สร้าง Event
+        ↓
+Trace Collector
+        ↓
+SQLite
+        ↓
+Behavioral Trace
+        ↓
+แสดง Session Timeline
